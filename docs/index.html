@@ -128,9 +128,12 @@ table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;font
 th,td{padding:9px 10px;text-align:right;border-bottom:1px solid var(--rule);white-space:nowrap}
 th:first-child,td:first-child{text-align:left}
 thead th{font-weight:600;color:var(--ink-2);font-size:13px;border-bottom:1px solid var(--ink)}
-thead tr.grp th{border-bottom:1px solid var(--rule);font-size:12.5px;color:var(--ink-3);text-align:center}
-thead tr.grp th.empty{border-bottom:0}
-#math-t tbody td:nth-child(10),#math-t thead tr:not(.grp) th:nth-child(10){border-left:1px solid var(--rule)}
+thead tr.top th{vertical-align:top;color:var(--ink);font-size:13px;padding-bottom:6px}
+thead tr.top th.span{text-align:center;border-bottom:1px solid var(--rule)}
+thead tr.sub th{font-weight:500;color:var(--ink-3);font-size:12.5px;padding-top:7px}
+thead tr.top th.solo{padding-bottom:9px}
+th.gs,td.gs{border-left:1px solid var(--rule)}
+thead th small{display:block;font-weight:500;color:var(--ink-3);font-size:12px;margin-top:2px}
 tr.ours td{background:var(--accent-wash)}
 tr.ours td:first-child{font-weight:700;color:var(--accent)}
 tr.fam td{background:transparent;color:var(--ink-3);font-size:12.5px;font-weight:600;text-align:left;padding-top:14px;border-bottom:0}
@@ -472,7 +475,7 @@ footer a{color:var(--ink-2)}
     <div class="key"><span><i class="dot" style="background:#0e7490"></i>V2T + GRPO</span><span><i class="dot" style="background:#9aa1ae"></i>other 7B models</span></div>
     <div style="margin-top:40px">
       <h3>By benchmark and problem type</h3>
-      <p class="muted" style="font-size:15.5px">MathVista (testmini) overall and by problem type, followed by two separate benchmarks, MathVision and LogicVista. Best per column in bold, second underlined.</p>
+      <p class="muted" style="font-size:15.5px">MathVista (testmini) overall and by problem type, followed by two separate benchmarks, MathVision (mini) and LogicVista. Best per column in bold, second underlined.</p>
       <div class="tablewrap"><table id="math-t"></table></div>
     </div>
   </div>
@@ -626,17 +629,25 @@ bars("abl", [["V2T + GRPO", 63.4, C.acc, 1], ["− grounding reward", 62.0, C.ba
 bars("ctl", [["V2T (student)", 61.8, C.acc, 1], ["Qwen2.5-VL-7B", 57.8, C.base], ["Text-only SFT", 56.2, C.base], ["Interleaved SFT (teacher)", 54.9, C.base]], 50, 66);
 
 /* ---------- full Table 2 ---------- */
-function table(id, cols, groups, rows, higher = true, skipCols = []) {
+function table(id, spec, rows, higher = true, skipCols = []) {
+  // spec: "Name" for a one-column benchmark, or ["Benchmark", ["sub", ...]] for a group
+  const G = spec.map(g => typeof g === "string" ? [g, []] : g);
+  const cols = [], gs = new Set();
+  const two = G.some(([, subs]) => subs.length);
+  G.forEach(([n, subs], k) => { if (k && two) gs.add(cols.length); (subs.length ? subs : [n]).forEach(c => cols.push(c)); });
+  const cls = (j, extra = "") => { const c = (gs.has(j) ? "gs " : "") + extra; return c.trim() ? ` class="${c.trim()}"` : ""; };
   const nums = cols.map((_, j) => rows.filter(r => r[0] !== "fam").map(r => r[2][j]).filter(v => typeof v === "number"));
   const rank = cols.map((_, j) => { if (skipCols.includes(j)) return [null, null]; const s = [...new Set(nums[j])].sort((a, b) => higher ? b - a : a - b); return [s[0], s[1]]; });
-  const t = document.getElementById(id);
-  t.innerHTML = (groups ? `<thead><tr class="grp"><th class="empty"></th>${groups.map(([n, span]) => `<th colspan="${span}"${n ? "" : ' class="empty"'}>${n}</th>`).join("")}</tr>` : "<thead>") +
-    `<tr><th scope="col">Model</th>${cols.map(c => `<th scope="col">${c}</th>`).join("")}</tr></thead><tbody>` +
+  let top = `<th scope="col"${two ? ' rowspan="2"' : ""}>Model</th>`, sub = "", j = 0;
+  G.forEach(([n, subs]) => {
+    if (subs.length) { top += `<th scope="colgroup" colspan="${subs.length}"${cls(j, "span")}>${n}</th>`; subs.forEach(c => { sub += `<th scope="col"${cls(j)}>${c}</th>`; j++; }); }
+    else { top += `<th scope="col"${two ? ' rowspan="2"' : ""}${cls(j, "solo")}>${n}</th>`; j++; }
+  });
+  document.getElementById(id).innerHTML = `<thead><tr class="top">${top}</tr>${two ? `<tr class="sub">${sub}</tr>` : ""}</thead><tbody>` +
     rows.map(r => r[0] === "fam" ? `<tr class="fam"><td colspan="${cols.length + 1}">${r[1]}</td></tr>` :
-      `<tr class="${r[1] ? "ours" : ""}"><td>${r[0]}</td>${r[2].map((v, j) => `<td class="${v === rank[j][0] ? "best" : v === rank[j][1] ? "second" : ""}">${typeof v === "number" ? v.toFixed(1) : v}</td>`).join("")}</tr>`).join("") + "</tbody>";
+      `<tr class="${r[1] ? "ours" : ""}"><td>${r[0]}</td>${r[2].map((v, j) => `<td${cls(j, v === rank[j][0] ? "best" : v === rank[j][1] ? "second" : "")}>${typeof v === "number" ? v.toFixed(1) : v}</td>`).join("")}</tr>`).join("") + "</tbody>";
 }
-table("full", ["Train", "HR4K", "HR8K", "V*", "Func.", "Visual", "Obj. loc.", "Forensics", "Jigsaw", "Multi-view", "POPE", "Avg"],
-  [["", 1], ["HR-Bench", 2], ["", 1], ["BLINK", 6], ["", 1], ["", 1]],
+table("full", ["Train<small>GPU-h</small>", ["HR-Bench", ["4K", "8K"]], "V*Bench", ["BLINK", ["Func.", "Visual", "Obj. loc.", "Forensics", "Jigsaw", "Multi-view"]], "POPE", "Avg"],
   [["fam", "Text reasoning · inference 1×"],
    ["R1-VL-7B", 0, ["167∗", 52.9, 45.2, 43.5, 22.3, 52.3, 48.4, 44.7, 65.3, 42.1, 90.1, 50.6]],
    ["VLAA-Thinker-7B", 0, ["167∗", 50.5, 41.4, 48.7, 22.3, 50.0, 48.4, 47.7, 60.0, 42.1, 86.1, 49.7]],
@@ -668,12 +679,11 @@ const MATH = [ // name, ours, [MathVista overall, arithmetic, numeric commonsens
   ["LVR-7B", 0, [67.3, 63.2, 48.6, 66.5, 64.1, 75.3, 67.8, 63.9, 21.7, 35.3]],
   ["Monet-7B", 0, [66.1, 64.0, 46.5, 58.2, 58.7, 77.4, 57.2, 63.9, 20.4, 39.6]]];
 bars("mv", MATH.map(([n, o, v]) => [n, v[0], o && n === "V2T + GRPO" ? C.acc : C.base, o]).sort((a, b) => b[1] - a[1]).map(r => r[0] === "V2T" ? [r[0], r[1], C.base, 1] : r), 60, 76);
-table("math-t", ["Overall", "Arith.", "Numeric", "Geometry", "Algebra", "Word prob.", "Geo. solving", "Textbook", "MathVision", "LogicVista"],
-  [["MathVista (testmini)", 8], ["", 1], ["", 1]],
+table("math-t", [["MathVista (testmini)", ["Overall", "Arith.", "Numeric", "Geometry", "Algebra", "Word prob.", "Geo. solving", "Textbook"]], "MathVision<small>mini</small>", "LogicVista"],
   MATH.map(([n, o, v]) => [n, o, v]));
 
 /* ---------- Zebra-CoT (Table 1) ---------- */
-table("zebra", ["Graph", "RPM", "Tetris", "Visual search", "Avg"], null, [
+table("zebra", ["Graph", "RPM", "Tetris", "Visual search", "Avg"], [
   ["R1-VL-7B", 0, [44.5, 10.6, 55.0, 60.5, 42.6]], ["VLAA-Thinker-7B", 0, [58.0, 54.8, 68.0, 63.0, 60.9]], ["VL-Rethinker-7B", 0, [45.0, 55.8, 69.0, 64.5, 58.6]],
   ["LVR-7B", 0, [17.5, 23.1, 25.5, 66.5, 33.2]], ["Monet-7B", 0, [39.0, 7.5, 27.5, 59.0, 33.3]], ["Qwen2.5-VL-7B", 0, [54.5, 45.7, 69.0, 61.0, 57.6]],
   ["Interleaved SFT (teacher)", 0, [48.5, 65.8, 65.0, 65.5, 61.2]], ["V2T", 1, [61.5, 81.9, 81.5, 77.0, 75.5]]]);
